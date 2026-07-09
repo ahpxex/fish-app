@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FishWellness</string>
+    <string name="accessibility_service_label">FishWellness App Blocker</string>
+    <string name="accessibility_service_description">Monitors which apps are opened and shows a blocking screen when a blocked app is detected during restricted hours.</string>
+    <string name="notification_channel_block">App Blocking</string>
+    <string name="notification_channel_foreground">Block Service</string>
+    <string name="block_active_notification">App blocking is active</string>
+    <string name="quick_block_notification">Quick block active</string>
+</resources>
