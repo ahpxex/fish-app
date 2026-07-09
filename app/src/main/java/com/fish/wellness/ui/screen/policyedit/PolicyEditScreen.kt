@@ -1,4 +1,4 @@
-package com.fish.wellness.ui.screen.schedule
+package com.fish.wellness.ui.screen.policyedit
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
@@ -20,10 +21,10 @@ import com.fish.wellness.model.DayOfWeek
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleEditScreen(
-    scheduleId: Long,
+fun PolicyEditScreen(
     onBack: () -> Unit,
-    viewModel: ScheduleEditViewModel = hiltViewModel()
+    onSelectApps: (Long) -> Unit,
+    viewModel: PolicyEditViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showStartTimePicker by remember { mutableStateOf(false) }
@@ -36,14 +37,14 @@ fun ScheduleEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (scheduleId > 0) "Edit Schedule" else "New Schedule") },
+                title = { Text(if (state.id > 0) "Edit Policy" else "New Policy") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    if (scheduleId > 0) {
+                    if (state.id > 0) {
                         IconButton(onClick = { viewModel.delete() }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
@@ -69,7 +70,7 @@ fun ScheduleEditScreen(
             OutlinedTextField(
                 value = state.name,
                 onValueChange = viewModel::updateName,
-                label = { Text("Schedule name") },
+                label = { Text("Policy name") },
                 placeholder = { Text("e.g. Bedtime, Focus Hours") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -115,7 +116,7 @@ fun ScheduleEditScreen(
             Text("Repeat on", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = viewModel::selectAllDays, label = { Text("Every day") }, leadingIcon = null)
+                AssistChip(onClick = viewModel::selectAllDays, label = { Text("Every day") })
                 AssistChip(onClick = viewModel::selectWeekdays, label = { Text("Weekdays") })
                 AssistChip(onClick = viewModel::selectWeekends, label = { Text("Weekends") })
             }
@@ -125,6 +126,32 @@ fun ScheduleEditScreen(
                 onToggle = viewModel::toggleDay
             )
 
+            HorizontalDivider()
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                onClick = { viewModel.saveAndSelectApps { id -> onSelectApps(id) } }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Blocked Apps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (state.appCount == 0) "Tap to select apps"
+                            else "${state.appCount} app${if (state.appCount != 1) "s" else ""} selected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = { viewModel.saveAndSelectApps { id -> onSelectApps(id) } }) { Text("Edit") }
+                }
+            }
+
             Spacer(Modifier.weight(1f))
 
             Button(
@@ -133,7 +160,7 @@ fun ScheduleEditScreen(
                 shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                Text("Save Schedule", style = MaterialTheme.typography.titleMedium)
+                Text("Save Policy", style = MaterialTheme.typography.titleMedium)
             }
         }
     }
@@ -142,10 +169,7 @@ fun ScheduleEditScreen(
         TimePickerDialog(
             initialHour = state.startHour,
             initialMinute = state.startMinute,
-            onConfirm = { h, m ->
-                viewModel.updateStart(h, m)
-                showStartTimePicker = false
-            },
+            onConfirm = { h, m -> viewModel.updateStart(h, m); showStartTimePicker = false },
             onDismiss = { showStartTimePicker = false }
         )
     }
@@ -154,10 +178,7 @@ fun ScheduleEditScreen(
         TimePickerDialog(
             initialHour = state.endHour,
             initialMinute = state.endMinute,
-            onConfirm = { h, m ->
-                viewModel.updateEnd(h, m)
-                showEndTimePicker = false
-            },
+            onConfirm = { h, m -> viewModel.updateEnd(h, m); showEndTimePicker = false },
             onDismiss = { showEndTimePicker = false }
         )
     }
@@ -199,9 +220,8 @@ private fun DaySelector(
         contentPadding = PaddingValues(vertical = 4.dp)
     ) {
         items(DayOfWeek.ALL) { day ->
-            val isSelected = day in selectedDays
             FilterChip(
-                selected = isSelected,
+                selected = day in selectedDays,
                 onClick = { onToggle(day) },
                 label = { Text(day.shortName) }
             )

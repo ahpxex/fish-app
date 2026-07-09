@@ -2,15 +2,16 @@ package com.fish.wellness.data.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.Calendar
 
-@Entity(tableName = "schedules")
-data class ScheduleEntity(
+@Entity(tableName = "policies")
+data class PolicyEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
     val startMinutes: Int,
     val endMinutes: Int,
-    val daysOfWeek: Int,
+    val daysOfWeek: Int = EVERY_DAY,
     val enabled: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 ) {
@@ -27,30 +28,31 @@ data class ScheduleEntity(
         const val WEEKENDS = 96
     }
 
-    fun isActiveOnDay(dayOfWeek: Int): Boolean {
+    private fun isActiveOnDay(dayOfWeek: Int): Boolean {
         val bit = when (dayOfWeek) {
-            java.util.Calendar.MONDAY -> DAY_MON
-            java.util.Calendar.TUESDAY -> DAY_TUE
-            java.util.Calendar.WEDNESDAY -> DAY_WED
-            java.util.Calendar.THURSDAY -> DAY_THU
-            java.util.Calendar.FRIDAY -> DAY_FRI
-            java.util.Calendar.SATURDAY -> DAY_SAT
-            java.util.Calendar.SUNDAY -> DAY_SUN
+            Calendar.MONDAY -> DAY_MON
+            Calendar.TUESDAY -> DAY_TUE
+            Calendar.WEDNESDAY -> DAY_WED
+            Calendar.THURSDAY -> DAY_THU
+            Calendar.FRIDAY -> DAY_FRI
+            Calendar.SATURDAY -> DAY_SAT
+            Calendar.SUNDAY -> DAY_SUN
             else -> 0
         }
         return daysOfWeek and bit != 0
     }
 
-    fun isCurrentlyActive(now: java.util.Calendar = java.util.Calendar.getInstance()): Boolean {
+    fun isCurrentlyActive(now: Calendar = Calendar.getInstance()): Boolean {
         if (!enabled) return false
-        if (!isActiveOnDay(now.get(java.util.Calendar.DAY_OF_WEEK))) return false
-
-        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
-
+        if (!isActiveOnDay(now.get(Calendar.DAY_OF_WEEK))) return false
+        val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
         return if (startMinutes <= endMinutes) {
             currentMinutes in startMinutes until endMinutes
         } else {
             currentMinutes >= startMinutes || currentMinutes < endMinutes
         }
     }
+
+    val startLabel: String get() = "%02d:%02d".format(startMinutes / 60, startMinutes % 60)
+    val endLabel: String get() = "%02d:%02d".format(endMinutes / 60, endMinutes % 60)
 }

@@ -13,7 +13,6 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.fish.wellness.MainActivity
 import com.fish.wellness.data.dao.QuickBlockSessionDao
-import com.fish.wellness.data.dao.ScheduleDao
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +24,6 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class ScheduleForegroundService : Service() {
 
-    @Inject lateinit var scheduleDao: ScheduleDao
     @Inject lateinit var quickBlockDao: QuickBlockSessionDao
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

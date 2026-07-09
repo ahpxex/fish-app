@@ -4,8 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.fish.wellness.data.AppDatabase
 import com.fish.wellness.data.dao.BlockedAppDao
+import com.fish.wellness.data.dao.PolicyDao
 import com.fish.wellness.data.dao.QuickBlockSessionDao
-import com.fish.wellness.data.dao.ScheduleDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,10 +25,10 @@ object DatabaseModule {
             .build()
 
     @Provides
-    fun provideBlockedAppDao(db: AppDatabase): BlockedAppDao = db.blockedAppDao()
+    fun providePolicyDao(db: AppDatabase): PolicyDao = db.policyDao()
 
     @Provides
-    fun provideScheduleDao(db: AppDatabase): ScheduleDao = db.scheduleDao()
+    fun provideBlockedAppDao(db: AppDatabase): BlockedAppDao = db.blockedAppDao()
 
     @Provides
     fun provideQuickBlockSessionDao(db: AppDatabase): QuickBlockSessionDao = db.quickBlockSessionDao()

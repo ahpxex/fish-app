@@ -2,6 +2,7 @@ package com.fish.wellness.ui.screen.apppicker
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.fish.wellness.data.dao.BlockedAppDao
 import com.fish.wellness.data.entity.BlockedAppEntity
@@ -18,10 +19,10 @@ import javax.inject.Inject
 
 data class AppPickerUiState(
     val allApps: List<InstalledAppInfo> = emptyList(),
-    val blockedPackages: Set<String> = emptySet(),
     val searchQuery: String = "",
     val isLoading: Boolean = true
 ) {
+    val selectedApps: List<InstalledAppInfo> get() = allApps.filter { it.isBlocked }
     val filteredApps: List<InstalledAppInfo>
         get() = if (searchQuery.isBlank()) allApps
         else allApps.filter { it.appName.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true) }
@@ -30,8 +31,11 @@ data class AppPickerUiState(
 @HiltViewModel
 class AppPickerViewModel @Inject constructor(
     private val app: Application,
+    savedStateHandle: SavedStateHandle,
     private val blockedAppDao: BlockedAppDao
 ) : AndroidViewModel(app) {
+
+    val policyId: Long = savedStateHandle.get<Long>("policyId") ?: 0L
 
     private val _uiState = MutableStateFlow(AppPickerUiState())
     val uiState: StateFlow<AppPickerUiState> = _uiState.asStateFlow()
@@ -40,15 +44,17 @@ class AppPickerViewModel @Inject constructor(
 
     private fun loadApps() {
         viewModelScope.launch {
-            val blocked = blockedAppDao.getAllPackageNames().toHashSet()
+            val blocked = blockedAppDao.getByPolicy(policyId).associateBy { it.packageName }
             val apps = withContext(Dispatchers.IO) {
-                AppUtils.getInstalledApps(app).map { it.copy(isBlocked = it.packageName in blocked) }
+                AppUtils.getInstalledApps(app).map { installed ->
+                    val block = blocked[installed.packageName]
+                    installed.copy(
+                        isBlocked = block != null,
+                        dailyLimitMinutes = block?.dailyLimitMinutes ?: 0
+                    )
+                }
             }
-            _uiState.value = AppPickerUiState(
-                allApps = apps,
-                blockedPackages = blocked,
-                isLoading = false
-            )
+            _uiState.value = AppPickerUiState(allApps = apps, isLoading = false)
         }
     }
 
@@ -56,20 +62,47 @@ class AppPickerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(searchQuery = query)
     }
 
-    fun toggleBlock(app: InstalledAppInfo) {
+    fun toggleBlock(appInfo: InstalledAppInfo) {
         viewModelScope.launch {
-            if (app.packageName in _uiState.value.blockedPackages) {
-                blockedAppDao.delete(app.packageName)
+            if (appInfo.isBlocked) {
+                blockedAppDao.delete(policyId, appInfo.packageName)
+                updateAppList(appInfo.packageName, isBlocked = false, dailyLimitMinutes = 0)
             } else {
-                blockedAppDao.upsert(
-                    BlockedAppEntity(packageName = app.packageName, appName = app.appName)
+                blockedAppDao.insert(
+                    BlockedAppEntity(
+                        policyId = policyId,
+                        packageName = appInfo.packageName,
+                        appName = appInfo.appName,
+                        dailyLimitMinutes = 0
+                    )
                 )
+                updateAppList(appInfo.packageName, isBlocked = true, dailyLimitMinutes = 0)
             }
-            val newBlocked = blockedAppDao.getAllPackageNames().toHashSet()
-            _uiState.value = _uiState.value.copy(
-                blockedPackages = newBlocked,
-                allApps = _uiState.value.allApps.map { it.copy(isBlocked = it.packageName in newBlocked) }
-            )
         }
+    }
+
+    fun updateLimit(packageName: String, minutes: Int) {
+        viewModelScope.launch {
+            val appInfo = _uiState.value.allApps.find { it.packageName == packageName } ?: return@launch
+            blockedAppDao.delete(policyId, packageName)
+            blockedAppDao.insert(
+                BlockedAppEntity(
+                    policyId = policyId,
+                    packageName = packageName,
+                    appName = appInfo.appName,
+                    dailyLimitMinutes = minutes
+                )
+            )
+            updateAppList(packageName, isBlocked = true, dailyLimitMinutes = minutes)
+        }
+    }
+
+    private fun updateAppList(packageName: String, isBlocked: Boolean, dailyLimitMinutes: Int) {
+        _uiState.value = _uiState.value.copy(
+            allApps = _uiState.value.allApps.map {
+                if (it.packageName == packageName) it.copy(isBlocked = isBlocked, dailyLimitMinutes = dailyLimitMinutes)
+                else it
+            }
+        )
     }
 }
