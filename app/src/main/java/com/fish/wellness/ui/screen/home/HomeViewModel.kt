@@ -7,6 +7,7 @@ import com.fish.wellness.data.dao.PolicyDao
 import com.fish.wellness.data.dao.QuickBlockSessionDao
 import com.fish.wellness.data.entity.PolicyEntity
 import com.fish.wellness.data.entity.QuickBlockSessionEntity
+import com.fish.wellness.manager.AppBlockManager
 import com.fish.wellness.manager.PasswordManager
 import com.fish.wellness.service.ScheduleAlarmReceiver
 import com.fish.wellness.service.ScheduleForegroundService
@@ -39,6 +40,7 @@ class HomeViewModel @Inject constructor(
     private val app: Application,
     private val policyDao: PolicyDao,
     private val quickBlockDao: QuickBlockSessionDao,
+    private val blockManager: AppBlockManager,
     val passwordManager: PasswordManager
 ) : AndroidViewModel(app) {
 
@@ -72,18 +74,25 @@ class HomeViewModel @Inject constructor(
     }
 
     fun enablePolicy(policy: PolicyEntity) {
-        viewModelScope.launch { policyDao.update(policy.copy(enabled = true)) }
+        viewModelScope.launch {
+            policyDao.update(policy.copy(enabled = true))
+            blockManager.invalidate()
+        }
     }
 
     suspend fun needsPasswordToDisable(): Boolean = passwordManager.hasPassword()
 
     fun disablePolicy(policy: PolicyEntity) {
-        viewModelScope.launch { policyDao.update(policy.copy(enabled = false)) }
+        viewModelScope.launch {
+            policyDao.update(policy.copy(enabled = false))
+            blockManager.invalidate()
+        }
     }
 
     suspend fun disableWithPassword(policy: PolicyEntity, password: String): Boolean {
         if (passwordManager.verifyPassword(password)) {
             policyDao.update(policy.copy(enabled = false))
+            blockManager.invalidate()
             return true
         }
         return false
@@ -92,10 +101,14 @@ class HomeViewModel @Inject constructor(
     suspend fun setupPasswordAndDisable(policy: PolicyEntity, password: String) {
         passwordManager.setPassword(password)
         policyDao.update(policy.copy(enabled = false))
+        blockManager.invalidate()
     }
 
     fun deletePolicy(id: Long) {
-        viewModelScope.launch { policyDao.deleteById(id) }
+        viewModelScope.launch {
+            policyDao.deleteById(id)
+            blockManager.invalidate()
+        }
     }
 
     fun startQuickBlock(durationMinutes: Int) {
@@ -106,6 +119,7 @@ class HomeViewModel @Inject constructor(
             quickBlockDao.insert(QuickBlockSessionEntity(startAt = now, endAt = endAt))
             ScheduleAlarmReceiver.scheduleQuickBlockExpiry(getApplication(), endAt)
             ScheduleForegroundService.start(getApplication())
+            blockManager.invalidate()
         }
     }
 
@@ -113,6 +127,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             quickBlockDao.cancelAllActive()
             ScheduleForegroundService.stop(getApplication())
+            blockManager.invalidate()
         }
     }
 }

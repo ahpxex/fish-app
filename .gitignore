@@ -10,3 +10,12 @@
 local.properties
 /app/release/
 .claude/
+
+# Release signing
+/keystore/
+keystore.properties
+*.jks
+*.keystore
+
+# Maestro test artifacts
+report.xml

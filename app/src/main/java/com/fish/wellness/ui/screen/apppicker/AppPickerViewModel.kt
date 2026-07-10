@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.fish.wellness.data.dao.BlockedAppDao
 import com.fish.wellness.data.entity.BlockedAppEntity
+import com.fish.wellness.manager.AppBlockManager
 import com.fish.wellness.model.InstalledAppInfo
 import com.fish.wellness.util.AppUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,7 +33,8 @@ data class AppPickerUiState(
 class AppPickerViewModel @Inject constructor(
     private val app: Application,
     savedStateHandle: SavedStateHandle,
-    private val blockedAppDao: BlockedAppDao
+    private val blockedAppDao: BlockedAppDao,
+    private val blockManager: AppBlockManager
 ) : AndroidViewModel(app) {
 
     val policyId: Long = savedStateHandle.get<Long>("policyId") ?: 0L
@@ -78,6 +80,7 @@ class AppPickerViewModel @Inject constructor(
                 )
                 updateAppList(appInfo.packageName, isBlocked = true, dailyLimitMinutes = 0)
             }
+            blockManager.invalidate()
         }
     }
 
@@ -94,6 +97,7 @@ class AppPickerViewModel @Inject constructor(
                 )
             )
             updateAppList(packageName, isBlocked = true, dailyLimitMinutes = minutes)
+            blockManager.invalidate()
         }
     }
 

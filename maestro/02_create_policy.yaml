@@ -1,0 +1,20 @@
+appId: com.fish.wellness
+name: Create policy
+---
+- launchApp:
+    clearState: true
+- assertVisible: "New Policy"
+- tapOn: "New Policy"
+# PolicyEdit screen (top bar title is also "New Policy")
+- assertVisible: "Policy name"
+# Tap the field label to focus (the placeholder isn't exposed as a findable node)
+- tapOn: "Policy name"
+- inputText: "Focus"
+- tapOn: "Save Policy"
+# Back on Home -> the new policy card should appear (assert a stable card element;
+# the card always shows "Every day" for the default all-days policy).
+- assertVisible: "FishWellness"
+- extendedWaitUntil:
+    visible: "Every day"
+    timeout: 15000
+- assertVisible: "Every day"

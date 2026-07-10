@@ -24,6 +24,13 @@ interface BlockedAppDao {
     """)
     suspend fun getActiveBlocksForPackage(packageName: String): List<BlockedAppEntity>
 
+    @Query("""
+        SELECT b.* FROM blocked_apps b
+        INNER JOIN policies p ON b.policyId = p.id
+        WHERE p.enabled = 1
+    """)
+    suspend fun getAllActiveBlocks(): List<BlockedAppEntity>
+
     @Query("SELECT COUNT(*) FROM blocked_apps WHERE policyId = :policyId")
     fun observeCountByPolicy(policyId: Long): Flow<Int>
 

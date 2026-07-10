@@ -1,0 +1,12 @@
+appId: com.fish.wellness
+name: Home smoke
+---
+# Fresh launch with permissions pre-granted: Home is short, everything fits on screen.
+- launchApp:
+    clearState: true
+- assertVisible: "FishWellness"
+- assertVisible: "Quick Block"
+- assertVisible: "Start Blocking"
+- assertVisible: "Policies"
+- assertVisible: "New Policy"
+- assertVisible: "No policies yet. Create one to block specific apps on a schedule."

@@ -1,0 +1,29 @@
+appId: com.fish.wellness
+name: Policy -> add app + daily limit
+---
+- launchApp:
+    clearState: true
+- assertVisible: "New Policy"
+- tapOn: "New Policy"
+- tapOn: "Policy name"
+- inputText: "Apps Test"
+# Blocked Apps card auto-saves the policy and navigates to the picker
+- tapOn: "Blocked Apps"
+- assertVisible: "Select Apps to Block"
+- assertVisible: "0 apps selected"
+# Search for the built-in Settings app
+- tapOn: "Search apps..."
+- inputText: "Settings"
+# The search field now holds "Settings" too; tap the row's app name (2nd match)
+- tapOn:
+    text: "Settings"
+    index: 1
+# Blocking reveals the limit chip (default "Fully blocked")
+- assertVisible: "Fully blocked"
+- tapOn: "Fully blocked"
+- tapOn: "10m/day"
+# Selection counter should now read 1
+- assertVisible: "1 apps selected"
+# Done -> back to PolicyEdit, subtitle reflects the count
+- tapOn: "Done"
+- assertVisible: "1 app selected"

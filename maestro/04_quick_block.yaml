@@ -1,0 +1,20 @@
+appId: com.fish.wellness
+name: Quick block start/stop
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Start Blocking"
+- tapOn: "Start Blocking"
+- assertVisible: "Block all apps from every policy for:"
+- tapOn: "15 minutes"
+- tapOn: "Start"
+# Now active
+- extendedWaitUntil:
+    visible: "Quick Block Active"
+    timeout: 15000
+- assertVisible: "Stop Early"
+# Stop -> back to idle
+- tapOn: "Stop Early"
+- extendedWaitUntil:
+    visible: "Start Blocking"
+    timeout: 15000

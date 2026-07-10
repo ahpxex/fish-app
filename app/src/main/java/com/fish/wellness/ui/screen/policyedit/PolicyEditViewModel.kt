@@ -7,13 +7,16 @@ import androidx.lifecycle.viewModelScope
 import com.fish.wellness.data.dao.BlockedAppDao
 import com.fish.wellness.data.dao.PolicyDao
 import com.fish.wellness.data.entity.PolicyEntity
+import com.fish.wellness.manager.AppBlockManager
 import com.fish.wellness.model.DayOfWeek
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,19 +46,28 @@ class PolicyEditViewModel @Inject constructor(
     private val app: Application,
     savedStateHandle: SavedStateHandle,
     private val policyDao: PolicyDao,
-    private val blockedAppDao: BlockedAppDao
+    private val blockedAppDao: BlockedAppDao,
+    private val blockManager: AppBlockManager
 ) : AndroidViewModel(app) {
 
     val policyId: Long = savedStateHandle.get<Long>("policyId") ?: -1L
 
     private val _meta = MutableStateFlow(PolicyEditUiState(isLoading = true))
 
-    val uiState: StateFlow<PolicyEditUiState> = combine(
-        _meta,
-        blockedAppDao.observeCountByPolicy(if (policyId > 0) policyId else 0)
-    ) { meta, count ->
-        meta.copy(appCount = count)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PolicyEditUiState(isLoading = true))
+    // Count uses the effective id (the DB id once the policy is inserted), not the route arg,
+    // so that selecting apps on a brand-new policy reflects the count when we return from AppPicker.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<PolicyEditUiState> = _meta
+        .flatMapLatest { meta ->
+            val effectiveId = when {
+                meta.id > 0 -> meta.id
+                policyId > 0 -> policyId
+                else -> 0
+            }
+            blockedAppDao.observeCountByPolicy(effectiveId)
+                .map { count -> meta.copy(appCount = count) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PolicyEditUiState(isLoading = true))
 
     init { load() }
 
@@ -114,6 +126,7 @@ class PolicyEditViewModel @Inject constructor(
             val entity = buildEntity(s)
             if (s.id > 0) policyDao.update(entity)
             else policyDao.insert(entity)
+            blockManager.invalidate()
             _meta.value = _meta.value.copy(isSaved = true)
         }
     }
@@ -123,12 +136,14 @@ class PolicyEditViewModel @Inject constructor(
         if (s.id > 0) {
             viewModelScope.launch {
                 policyDao.update(buildEntity(s))
+                blockManager.invalidate()
                 onResult(s.id)
             }
             return
         }
         viewModelScope.launch {
             val newId = policyDao.insert(buildEntity(s))
+            blockManager.invalidate()
             _meta.value = _meta.value.copy(id = newId)
             onResult(newId)
         }
@@ -138,6 +153,7 @@ class PolicyEditViewModel @Inject constructor(
         if (policyId > 0) {
             viewModelScope.launch {
                 policyDao.deleteById(policyId)
+                blockManager.invalidate()
                 _meta.value = _meta.value.copy(isSaved = true)
             }
         }
