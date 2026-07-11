@@ -5,7 +5,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -18,8 +17,8 @@ android {
         applicationId = "com.fish.wellness"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.2.0"
+        versionCode = 7
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -84,6 +83,10 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // Core
     implementation(libs.androidx.core.ktx)
@@ -114,14 +117,8 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
-    // WorkManager
-    implementation(libs.androidx.work.runtime)
-    implementation(libs.hilt.work)
-    ksp(libs.hilt.work.compiler)
-
     // DataStore
     implementation(libs.androidx.datastore)
 
-    // Serialization
-    implementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.junit)
 }

@@ -13,15 +13,12 @@ interface QuickBlockSessionDao {
     @Query("SELECT * FROM quick_block_sessions WHERE isActive = 1 ORDER BY startAt DESC")
     fun observeActive(): Flow<List<QuickBlockSessionEntity>>
 
-    @Query("SELECT * FROM quick_block_sessions WHERE isActive = 1 AND :now BETWEEN startAt AND endAt LIMIT 1")
-    suspend fun getActiveAt(now: Long): QuickBlockSessionEntity?
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(session: QuickBlockSessionEntity): Long
 
     @Query("UPDATE quick_block_sessions SET isActive = 0 WHERE isActive = 1")
     suspend fun cancelAllActive()
 
-    @Query("UPDATE quick_block_sessions SET isActive = 0 WHERE endAt < :now AND isActive = 1")
+    @Query("UPDATE quick_block_sessions SET isActive = 0 WHERE endAt <= :now AND isActive = 1")
     suspend fun expireOldSessions(now: Long): Int
 }

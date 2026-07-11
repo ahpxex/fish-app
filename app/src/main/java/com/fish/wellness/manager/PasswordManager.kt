@@ -7,9 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,9 +20,6 @@ class PasswordManager @Inject constructor(
 ) {
     private val key = stringPreferencesKey("password_hash")
 
-    fun observeHasPassword(): Flow<Boolean> =
-        context.passwordDataStore.data.map { it[key] != null }
-
     suspend fun hasPassword(): Boolean =
         context.passwordDataStore.data.first()[key] != null
 
@@ -35,10 +30,6 @@ class PasswordManager @Inject constructor(
     suspend fun verifyPassword(input: String): Boolean {
         val stored = context.passwordDataStore.data.first()[key] ?: return false
         return stored == hash(input)
-    }
-
-    suspend fun clearPassword() {
-        context.passwordDataStore.edit { it.remove(key) }
     }
 
     private fun hash(input: String): String {

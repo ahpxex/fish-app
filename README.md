@@ -8,14 +8,18 @@ A native Android app that blocks access to selected apps during specified time s
 - **Time Schedules** — Create recurring schedules (e.g., 22:00–07:00 every night) with day-of-week selection
 - **Quick Block** — Temporarily block all selected apps for 15–120 minutes on demand
 - **Block Overlay** — Full-screen blocking activity shown on top of any blocked app
-- **Foreground Service** — Keeps blocking active across reboots
+- **Live Enforcement** — Re-evaluates the foreground app when rules or schedule boundaries change
 
 ## How It Works
 
 1. `AppBlockAccessibilityService` listens for `TYPE_WINDOW_STATE_CHANGED` events
-2. When the foreground app changes, `AppBlockManager` checks if that package is currently blocked
-3. A package is blocked if: it's in the blocked-apps list AND (an active quick-block session exists OR an enabled schedule is currently active)
-4. If blocked, `BlockOverlayActivity` launches on top, preventing app usage
+2. Room flows feed `BlockingPolicyStore`, the runtime's immutable source of truth
+3. `BlockingPolicyEvaluator` applies quick-block, weekly schedule, and daily-limit contracts
+4. The accessibility service re-evaluates the current app every 500 ms and renders an accessibility overlay when blocked
+
+Overnight schedules belong to the day on which they start. For example, a Monday
+22:00-14:00 policy remains active until Tuesday 14:00. Equal start and end times
+represent a 24-hour window.
 
 ## Tech Stack
 
@@ -24,7 +28,7 @@ A native Android app that blocks access to selected apps during specified time s
 | UI | Jetpack Compose + Material 3 |
 | DI | Hilt |
 | DB | Room |
-| Scheduling | AlarmManager + WorkManager |
+| Policy engine | Pure Kotlin + `java.time` |
 | Monitoring | AccessibilityService |
 
 ## Build & Run
@@ -41,11 +45,8 @@ APK output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ## Required Permissions (user-granted at runtime)
 
-- **SYSTEM_ALERT_WINDOW** — Display overlay on blocked apps
 - **Accessibility Service** — Detect foreground app changes
-- **Usage Access** — Query app usage stats
-- **RECEIVE_BOOT_COMPLETED** — Restart service after reboot
-- **SCHEDULE_EXACT_ALARM** — Precise schedule triggers
+- **Usage Access** — Query app usage stats only when daily limits are configured
 
 ## Project Structure
 
@@ -54,18 +55,15 @@ app/src/main/java/com/fish/wellness/
 ├── FishApplication.kt          # Hilt entry point
 ├── MainActivity.kt             # Single-activity Compose host
 ├── data/                       # Room database layer
-│   ├── entity/                 # BlockedApp, Schedule, QuickBlockSession
+│   ├── entity/                 # Policy, BlockedApp, QuickBlockSession
 │   └── dao/                    # Data access objects
+├── domain/blocking/            # Schedule matching and blocking decisions
 ├── di/                         # Hilt modules
 ├── manager/
-│   └── AppBlockManager.kt      # Core blocking logic
+│   └── BlockingPolicyStore.kt  # Reactive immutable rule snapshots
 ├── service/
 │   ├── AppBlockAccessibilityService.kt  # Monitors foreground changes
-│   ├── BlockOverlayActivity.kt          # Full-screen block screen
-│   ├── ScheduleForegroundService.kt     # Keeps blocking alive
-│   └── ScheduleAlarmReceiver.kt         # Quick-block expiry alarms
-├── receiver/
-│   └── BootReceiver.kt          # Restart on boot
+│   └── BlockOverlayActivity.kt          # Last-resort overlay fallback
 ├── model/                      # Domain models
 ├── util/                       # Permission & app utilities
 └── ui/

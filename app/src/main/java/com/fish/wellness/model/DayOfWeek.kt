@@ -18,22 +18,5 @@ enum class DayOfWeek(val calValue: Int, val bit: Int, val shortName: String) {
         fun toBits(days: Set<DayOfWeek>): Int =
             days.sumOf { it.bit }
 
-        const val EVERY_DAY = 127
-        const val WEEKDAYS = 31
-        const val WEEKENDS = 96
-    }
-}
-
-data class TimeRange(val startMinutes: Int, val endMinutes: Int) {
-    val startHour get() = startMinutes / 60
-    val startMinute get() = startMinutes % 60
-    val endHour get() = endMinutes / 60
-    val endMinute get() = endMinutes % 60
-
-    fun formatStart(): String = "%02d:%02d".format(startHour, startMinute)
-    fun formatEnd(): String = "%02d:%02d".format(endHour, endMinute)
-
-    companion object {
-        fun fromTime(hour: Int, minute: Int) = hour * 60 + minute
     }
 }

@@ -1,11 +1,14 @@
 package com.fish.wellness.util
 
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import java.util.Calendar
+import kotlin.math.max
 
 object UsageTracker {
 
+    @Suppress("DEPRECATION")
     fun getForegroundMillisToday(context: Context, packageName: String): Long {
         val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val cal = Calendar.getInstance().apply {
@@ -17,21 +20,40 @@ object UsageTracker {
         val startToday = cal.timeInMillis
         val now = System.currentTimeMillis()
 
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
-            startToday,
-            now
-        ) ?: return 0
+        val aggregateMillis = usageStatsManager
+            .queryAndAggregateUsageStats(startToday, now)[packageName]
+            ?.totalTimeInForeground
+            ?: 0L
 
-        return stats
-            .filter { it.packageName == packageName }
-            .sumOf { it.totalTimeInForeground }
+        var eventMillis = 0L
+        var foregroundSince: Long? = null
+        val events = usageStatsManager.queryEvents(startToday, now)
+        val event = UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.packageName != packageName) continue
+            when (event.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED,
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                    if (foregroundSince == null) {
+                        foregroundSince = max(startToday, event.timeStamp)
+                    }
+                }
+
+                UsageEvents.Event.ACTIVITY_PAUSED,
+                UsageEvents.Event.ACTIVITY_STOPPED,
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                    foregroundSince?.let { startedAt ->
+                        eventMillis += (event.timeStamp - startedAt).coerceAtLeast(0L)
+                        foregroundSince = null
+                    }
+                }
+            }
+        }
+        foregroundSince?.let { eventMillis += (now - it).coerceAtLeast(0L) }
+
+        // Aggregate stats are durable, while events include the current session more quickly.
+        return max(aggregateMillis, eventMillis)
     }
 
-    fun getRemainingMinutes(context: Context, packageName: String, dailyLimitMinutes: Int): Int {
-        val usedMillis = getForegroundMillisToday(context, packageName)
-        val limitMillis = dailyLimitMinutes * 60_000L
-        val remaining = (limitMillis - usedMillis) / 60_000
-        return remaining.toInt().coerceAtLeast(0)
-    }
 }

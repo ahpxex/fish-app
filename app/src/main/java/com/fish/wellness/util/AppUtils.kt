@@ -1,6 +1,5 @@
 package com.fish.wellness.util
 
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -40,12 +39,6 @@ object AppUtils {
         pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
     } catch (_: Exception) { packageName }
 
-    fun launchApp(context: Context, packageName: String) {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent?.let { context.startActivity(it) }
-    }
-
     fun goToHome(context: Context) {
         val intent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
@@ -54,17 +47,4 @@ object AppUtils {
         context.startActivity(intent)
     }
 
-    fun getForegroundApp(context: Context): String? {
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val now = System.currentTimeMillis()
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_BEST,
-            now - 5000,
-            now
-        )
-        return stats
-            ?.filter { it.lastTimeUsed > 0 }
-            ?.maxByOrNull { it.lastTimeUsed }
-            ?.packageName
-    }
 }

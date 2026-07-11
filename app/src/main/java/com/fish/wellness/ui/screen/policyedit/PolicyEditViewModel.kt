@@ -1,16 +1,13 @@
 package com.fish.wellness.ui.screen.policyedit
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fish.wellness.data.dao.BlockedAppDao
 import com.fish.wellness.data.dao.PolicyDao
 import com.fish.wellness.data.entity.PolicyEntity
-import com.fish.wellness.manager.AppBlockManager
 import com.fish.wellness.model.DayOfWeek
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +16,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class PolicyEditUiState(
@@ -31,6 +27,7 @@ data class PolicyEditUiState(
     val endMinute: Int = 0,
     val days: Set<DayOfWeek> = DayOfWeek.ALL.toSet(),
     val enabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
     val isLoading: Boolean = true,
     val isSaved: Boolean = false,
     val appCount: Int = 0
@@ -43,12 +40,10 @@ data class PolicyEditUiState(
 
 @HiltViewModel
 class PolicyEditViewModel @Inject constructor(
-    private val app: Application,
     savedStateHandle: SavedStateHandle,
     private val policyDao: PolicyDao,
-    private val blockedAppDao: BlockedAppDao,
-    private val blockManager: AppBlockManager
-) : AndroidViewModel(app) {
+    private val blockedAppDao: BlockedAppDao
+) : ViewModel() {
 
     val policyId: Long = savedStateHandle.get<Long>("policyId") ?: -1L
 
@@ -77,7 +72,7 @@ class PolicyEditViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val policy = withContext(Dispatchers.IO) { policyDao.getById(policyId) }
+            val policy = policyDao.getById(policyId)
             if (policy != null) {
                 _meta.value = PolicyEditUiState(
                     id = policy.id,
@@ -88,6 +83,7 @@ class PolicyEditViewModel @Inject constructor(
                     endMinute = policy.endMinutes % 60,
                     days = DayOfWeek.fromBits(policy.daysOfWeek),
                     enabled = policy.enabled,
+                    createdAt = policy.createdAt,
                     isLoading = false
                 )
             } else {
@@ -117,7 +113,8 @@ class PolicyEditViewModel @Inject constructor(
         startMinutes = s.startMinutes,
         endMinutes = s.endMinutes,
         daysOfWeek = DayOfWeek.toBits(s.days),
-        enabled = s.enabled
+        enabled = s.enabled,
+        createdAt = s.createdAt
     )
 
     fun save() {
@@ -126,7 +123,6 @@ class PolicyEditViewModel @Inject constructor(
             val entity = buildEntity(s)
             if (s.id > 0) policyDao.update(entity)
             else policyDao.insert(entity)
-            blockManager.invalidate()
             _meta.value = _meta.value.copy(isSaved = true)
         }
     }
@@ -136,14 +132,12 @@ class PolicyEditViewModel @Inject constructor(
         if (s.id > 0) {
             viewModelScope.launch {
                 policyDao.update(buildEntity(s))
-                blockManager.invalidate()
                 onResult(s.id)
             }
             return
         }
         viewModelScope.launch {
             val newId = policyDao.insert(buildEntity(s))
-            blockManager.invalidate()
             _meta.value = _meta.value.copy(id = newId)
             onResult(newId)
         }
@@ -153,7 +147,6 @@ class PolicyEditViewModel @Inject constructor(
         if (policyId > 0) {
             viewModelScope.launch {
                 policyDao.deleteById(policyId)
-                blockManager.invalidate()
                 _meta.value = _meta.value.copy(isSaved = true)
             }
         }

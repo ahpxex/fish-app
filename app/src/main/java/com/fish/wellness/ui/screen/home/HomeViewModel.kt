@@ -3,96 +3,127 @@ package com.fish.wellness.ui.screen.home
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.fish.wellness.data.dao.BlockedAppDao
 import com.fish.wellness.data.dao.PolicyDao
 import com.fish.wellness.data.dao.QuickBlockSessionDao
 import com.fish.wellness.data.entity.PolicyEntity
 import com.fish.wellness.data.entity.QuickBlockSessionEntity
-import com.fish.wellness.manager.AppBlockManager
 import com.fish.wellness.manager.PasswordManager
-import com.fish.wellness.service.ScheduleAlarmReceiver
-import com.fish.wellness.service.ScheduleForegroundService
 import com.fish.wellness.util.PermissionChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import javax.inject.Inject
 
 data class HomeUiState(
     val policies: List<PolicyEntity> = emptyList(),
     val activeQuickBlocks: List<QuickBlockSessionEntity> = emptyList(),
-    val hasOverlayPermission: Boolean = false,
     val hasAccessibilityPermission: Boolean = false,
     val hasUsageStatsPermission: Boolean = false,
-    val hasPassword: Boolean = false
+    val hasDailyLimits: Boolean = false,
+    val now: LocalDateTime = LocalDateTime.now(),
+    val nowEpochMillis: Long = System.currentTimeMillis()
 ) {
     val allPermissionsGranted: Boolean
-        get() = hasOverlayPermission && hasAccessibilityPermission && hasUsageStatsPermission
-    val activePolicyCount: Int
-        get() = policies.count { it.enabled && it.isCurrentlyActive() }
+        get() = hasAccessibilityPermission && (!hasDailyLimits || hasUsageStatsPermission)
 }
+
+private data class HomeData(
+    val policies: List<PolicyEntity>,
+    val quickBlocks: List<QuickBlockSessionEntity>,
+    val hasDailyLimits: Boolean
+)
+
+private data class PermissionState(
+    val accessibility: Boolean = false,
+    val usageStats: Boolean = false
+)
+
+private data class ClockTick(val localDateTime: LocalDateTime, val epochMillis: Long)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val app: Application,
     private val policyDao: PolicyDao,
+    blockedAppDao: BlockedAppDao,
     private val quickBlockDao: QuickBlockSessionDao,
-    private val blockManager: AppBlockManager,
     val passwordManager: PasswordManager
 ) : AndroidViewModel(app) {
 
-    private val _permissions = MutableStateFlow(Triple(false, false, false))
+    private val _permissions = MutableStateFlow(PermissionState())
 
-    val uiState: StateFlow<HomeUiState> = combine(
+    private val homeData = combine(
         policyDao.observeAll(),
         quickBlockDao.observeActive(),
-        _permissions,
-        passwordManager.observeHasPassword()
-    ) { policies, quickBlocks, perms, hasPassword ->
-        HomeUiState(
+        blockedAppDao.observeAll()
+    ) { policies, quickBlocks, blockedApps ->
+        HomeData(
             policies = policies,
-            activeQuickBlocks = quickBlocks,
-            hasOverlayPermission = perms.first,
-            hasAccessibilityPermission = perms.second,
-            hasUsageStatsPermission = perms.third,
-            hasPassword = hasPassword
+            quickBlocks = quickBlocks,
+            hasDailyLimits = blockedApps.any { !it.isFullBlock }
+        )
+    }
+
+    private val clock = flow {
+        while (currentCoroutineContext().isActive) {
+            emit(ClockTick(LocalDateTime.now(), System.currentTimeMillis()))
+            delay(1_000L)
+        }
+    }
+
+    val uiState: StateFlow<HomeUiState> = combine(
+        homeData,
+        _permissions,
+        clock
+    ) { data, permissions, tick ->
+        HomeUiState(
+            policies = data.policies,
+            activeQuickBlocks = data.quickBlocks.filter {
+                it.isActive && tick.epochMillis >= it.startAt && tick.epochMillis < it.endAt
+            },
+            hasAccessibilityPermission = permissions.accessibility,
+            hasUsageStatsPermission = permissions.usageStats,
+            hasDailyLimits = data.hasDailyLimits,
+            now = tick.localDateTime,
+            nowEpochMillis = tick.epochMillis
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 
-    init { refreshPermissions() }
+    init {
+        refreshPermissions()
+        viewModelScope.launch {
+            quickBlockDao.expireOldSessions(System.currentTimeMillis())
+        }
+    }
 
     fun refreshPermissions() {
         val ctx = getApplication<Application>()
-        _permissions.value = Triple(
-            PermissionChecker.canDrawOverlays(ctx),
-            PermissionChecker.isAccessibilityServiceEnabled(ctx),
-            PermissionChecker.hasUsageStatsPermission(ctx)
+        _permissions.value = PermissionState(
+            accessibility = PermissionChecker.isAccessibilityServiceEnabled(ctx),
+            usageStats = PermissionChecker.hasUsageStatsPermission(ctx)
         )
     }
 
     fun enablePolicy(policy: PolicyEntity) {
         viewModelScope.launch {
             policyDao.update(policy.copy(enabled = true))
-            blockManager.invalidate()
         }
     }
 
     suspend fun needsPasswordToDisable(): Boolean = passwordManager.hasPassword()
 
-    fun disablePolicy(policy: PolicyEntity) {
-        viewModelScope.launch {
-            policyDao.update(policy.copy(enabled = false))
-            blockManager.invalidate()
-        }
-    }
-
     suspend fun disableWithPassword(policy: PolicyEntity, password: String): Boolean {
         if (passwordManager.verifyPassword(password)) {
             policyDao.update(policy.copy(enabled = false))
-            blockManager.invalidate()
             return true
         }
         return false
@@ -101,33 +132,21 @@ class HomeViewModel @Inject constructor(
     suspend fun setupPasswordAndDisable(policy: PolicyEntity, password: String) {
         passwordManager.setPassword(password)
         policyDao.update(policy.copy(enabled = false))
-        blockManager.invalidate()
-    }
-
-    fun deletePolicy(id: Long) {
-        viewModelScope.launch {
-            policyDao.deleteById(id)
-            blockManager.invalidate()
-        }
     }
 
     fun startQuickBlock(durationMinutes: Int) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val endAt = now + durationMinutes * 60_000L
+            quickBlockDao.expireOldSessions(now)
             quickBlockDao.cancelAllActive()
             quickBlockDao.insert(QuickBlockSessionEntity(startAt = now, endAt = endAt))
-            ScheduleAlarmReceiver.scheduleQuickBlockExpiry(getApplication(), endAt)
-            ScheduleForegroundService.start(getApplication())
-            blockManager.invalidate()
         }
     }
 
     fun cancelQuickBlock() {
         viewModelScope.launch {
             quickBlockDao.cancelAllActive()
-            ScheduleForegroundService.stop(getApplication())
-            blockManager.invalidate()
         }
     }
 }

@@ -11,24 +11,6 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Show overlay on top of other apps -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
-    <!-- Foreground service for monitoring -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Boot -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <!-- Exact alarm for schedule triggers -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-
-    <!-- Vibrate for feedback -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-
     <application
         android:name=".FishApplication"
         android:allowBackup="true"
@@ -76,41 +58,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
-
-        <!-- Foreground service for schedule management -->
-        <service
-            android:name=".service.ScheduleForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Manage app blocking schedules and display block overlay" />
-        </service>
-
-        <!-- Alarm receivers -->
-        <receiver
-            android:name=".service.ScheduleAlarmReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".receiver.BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Remove default WorkManager initializer; FishApplication provides on-demand config -->
-        <provider
-            android:name="androidx.startup.InitializationProvider"
-            android:authorities="${applicationId}.androidx-startup"
-            android:exported="false"
-            tools:node="merge">
-            <meta-data
-                android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup"
-                tools:node="remove" />
-        </provider>
 
     </application>
 

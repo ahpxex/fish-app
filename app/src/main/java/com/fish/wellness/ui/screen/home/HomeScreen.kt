@@ -43,7 +43,7 @@ fun HomeScreen(
     var passwordError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    val overlayLauncher = rememberLauncherForActivityResult(
+    val settingsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { viewModel.refreshPermissions() }
 
@@ -88,9 +88,8 @@ fun HomeScreen(
                 item {
                     PermissionSection(
                         state = state,
-                        onOverlaySettings = { overlayLauncher.launch(PermissionChecker.overlaySettingsIntent()) },
-                        onAccessibilitySettings = { overlayLauncher.launch(PermissionChecker.accessibilitySettingsIntent()) },
-                        onUsageStatsSettings = { overlayLauncher.launch(PermissionChecker.usageStatsSettingsIntent()) }
+                        onAccessibilitySettings = { settingsLauncher.launch(PermissionChecker.accessibilitySettingsIntent()) },
+                        onUsageStatsSettings = { settingsLauncher.launch(PermissionChecker.usageStatsSettingsIntent()) }
                     )
                 }
             }
@@ -98,6 +97,7 @@ fun HomeScreen(
             item {
                 QuickBlockSection(
                     activeSessions = state.activeQuickBlocks,
+                    nowEpochMillis = state.nowEpochMillis,
                     onQuickBlock = { showQuickBlockDialog = true },
                     onCancel = { viewModel.cancelQuickBlock() }
                 )
@@ -122,7 +122,12 @@ fun HomeScreen(
                 item { EmptyCard("No policies yet. Create one to block specific apps on a schedule.") }
             } else {
                 items(state.policies, key = { it.id }) { policy ->
-                    PolicyCard(policy = policy, onToggle = { onToggle(policy) }, onEdit = { onEditPolicy(policy.id) })
+                    PolicyCard(
+                        policy = policy,
+                        now = state.now,
+                        onToggle = { onToggle(policy) },
+                        onEdit = { onEditPolicy(policy.id) }
+                    )
                 }
             }
 
@@ -146,7 +151,7 @@ fun HomeScreen(
             onConfirm = { password, confirm ->
                 scope.launch {
                     if (isPasswordSetup) {
-                        if (password != confirm) {
+                        if (password.length < 4 || password != confirm) {
                             passwordError = true
                             return@launch
                         }
@@ -171,7 +176,6 @@ fun HomeScreen(
 @Composable
 private fun PermissionSection(
     state: HomeUiState,
-    onOverlaySettings: () -> Unit,
     onAccessibilitySettings: () -> Unit,
     onUsageStatsSettings: () -> Unit
 ) {
@@ -187,9 +191,10 @@ private fun PermissionSection(
                 Text("Permissions Required", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
             }
             Spacer(Modifier.height(16.dp))
-            if (!state.hasOverlayPermission) { PermissionItem("Display over other apps", onOverlaySettings); Spacer(Modifier.height(8.dp)) }
             if (!state.hasAccessibilityPermission) { PermissionItem("Accessibility service", onAccessibilitySettings); Spacer(Modifier.height(8.dp)) }
-            if (!state.hasUsageStatsPermission) PermissionItem("Usage access", onUsageStatsSettings)
+            if (state.hasDailyLimits && !state.hasUsageStatsPermission) {
+                PermissionItem("Usage access for daily limits", onUsageStatsSettings)
+            }
         }
     }
 }
@@ -205,6 +210,7 @@ private fun PermissionItem(text: String, onGrant: () -> Unit) {
 @Composable
 private fun QuickBlockSection(
     activeSessions: List<QuickBlockSessionEntity>,
+    nowEpochMillis: Long,
     onQuickBlock: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -224,7 +230,7 @@ private fun QuickBlockSection(
                 Text(if (active != null) "Quick Block Active" else "Quick Block", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             if (active != null) {
-                val remaining = ((active.endAt - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+                val remaining = ((active.endAt - nowEpochMillis + 59_999L) / 60_000L).coerceAtLeast(0)
                 Spacer(Modifier.height(8.dp))
                 Text("$remaining minutes remaining", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Spacer(Modifier.height(12.dp))
@@ -241,8 +247,13 @@ private fun QuickBlockSection(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PolicyCard(policy: PolicyEntity, onToggle: () -> Unit, onEdit: () -> Unit) {
-    val isActive = policy.isCurrentlyActive()
+private fun PolicyCard(
+    policy: PolicyEntity,
+    now: java.time.LocalDateTime,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit
+) {
+    val isActive = policy.isCurrentlyActive(now)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -260,7 +271,7 @@ private fun PolicyCard(policy: PolicyEntity, onToggle: () -> Unit, onEdit: () ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(4.dp))
-                Text("${policy.startLabel} — ${policy.endLabel}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${policy.startLabel} to ${policy.endLabel}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(16.dp))
                 Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(4.dp))
@@ -316,7 +327,7 @@ private fun PasswordDialog(
                 }
                 if (hasError) {
                     Text(
-                        if (isSetupMode) "Passwords don't match" else "Incorrect password",
+                        if (isSetupMode) "Use at least 4 matching characters" else "Incorrect password",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )

@@ -4,7 +4,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import com.fish.wellness.data.entity.BlockedAppEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -12,24 +11,10 @@ import kotlinx.coroutines.flow.Flow
 interface BlockedAppDao {
 
     @Query("SELECT * FROM blocked_apps WHERE policyId = :policyId ORDER BY appName ASC")
-    fun observeByPolicy(policyId: Long): Flow<List<BlockedAppEntity>>
-
-    @Query("SELECT * FROM blocked_apps WHERE policyId = :policyId ORDER BY appName ASC")
     suspend fun getByPolicy(policyId: Long): List<BlockedAppEntity>
 
-    @Query("""
-        SELECT b.* FROM blocked_apps b
-        INNER JOIN policies p ON b.policyId = p.id
-        WHERE p.enabled = 1 AND b.packageName = :packageName
-    """)
-    suspend fun getActiveBlocksForPackage(packageName: String): List<BlockedAppEntity>
-
-    @Query("""
-        SELECT b.* FROM blocked_apps b
-        INNER JOIN policies p ON b.policyId = p.id
-        WHERE p.enabled = 1
-    """)
-    suspend fun getAllActiveBlocks(): List<BlockedAppEntity>
+    @Query("SELECT * FROM blocked_apps ORDER BY policyId, appName ASC")
+    fun observeAll(): Flow<List<BlockedAppEntity>>
 
     @Query("SELECT COUNT(*) FROM blocked_apps WHERE policyId = :policyId")
     fun observeCountByPolicy(policyId: Long): Flow<Int>
@@ -37,15 +22,30 @@ interface BlockedAppDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(app: BlockedAppEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertAll(apps: List<BlockedAppEntity>)
+    @Query("""
+        UPDATE blocked_apps
+        SET appName = :appName, dailyLimitMinutes = :dailyLimitMinutes
+        WHERE policyId = :policyId AND packageName = :packageName
+    """)
+    suspend fun updateRule(
+        policyId: Long,
+        packageName: String,
+        appName: String,
+        dailyLimitMinutes: Int
+    ): Int
 
-    @Update
-    suspend fun update(app: BlockedAppEntity)
+    @androidx.room.Transaction
+    suspend fun upsertRule(app: BlockedAppEntity) {
+        val updated = updateRule(
+            policyId = app.policyId,
+            packageName = app.packageName,
+            appName = app.appName,
+            dailyLimitMinutes = app.dailyLimitMinutes
+        )
+        if (updated == 0) insert(app)
+    }
 
     @Query("DELETE FROM blocked_apps WHERE policyId = :policyId AND packageName = :packageName")
     suspend fun delete(policyId: Long, packageName: String)
 
-    @Query("DELETE FROM blocked_apps WHERE policyId = :policyId")
-    suspend fun deleteByPolicy(policyId: Long)
 }

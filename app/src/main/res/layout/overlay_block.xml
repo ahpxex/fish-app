@@ -35,13 +35,14 @@
         tools:ignore="HardcodedText" />
 
     <TextView
+        android:id="@+id/blockReason"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:gravity="center"
         android:textSize="14sp"
         android:textColor="#49454F"
-        android:text="Take a break. This app is currently restricted by your schedule."
+        android:text="Restricted by an active policy."
         tools:ignore="HardcodedText" />
 
     <Button

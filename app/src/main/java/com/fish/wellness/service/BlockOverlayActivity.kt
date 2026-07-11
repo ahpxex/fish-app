@@ -1,33 +1,22 @@
 package com.fish.wellness.service
 
-import android.app.Activity
-import android.app.AlarmManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.LockClock
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.fish.wellness.domain.blocking.BlockReason
 import com.fish.wellness.util.AppUtils
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class BlockOverlayActivity : ComponentActivity() {
@@ -36,10 +25,14 @@ class BlockOverlayActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
         val appName = AppUtils.getAppName(this, packageName)
+        val reason = intent.getStringExtra(EXTRA_BLOCK_REASON)
+            ?.let { runCatching { BlockReason.valueOf(it) }.getOrNull() }
+            ?: BlockReason.SCHEDULE
 
         setContent {
             BlockOverlayScreen(
                 appName = appName,
+                reason = reason,
                 onClose = {
                     AppUtils.goToHome(this)
                     finish()
@@ -55,24 +48,15 @@ class BlockOverlayActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PACKAGE_NAME = "extra_package_name"
+        const val EXTRA_BLOCK_REASON = "extra_block_reason"
 
-        fun launch(context: Context, packageName: String) {
-            val intent = Intent(context, BlockOverlayActivity::class.java).apply {
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
-                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                )
-                putExtra(EXTRA_PACKAGE_NAME, packageName)
-            }
-            context.startActivity(intent)
-        }
     }
 }
 
 @Composable
 private fun BlockOverlayScreen(
     appName: String,
+    reason: BlockReason,
     onClose: () -> Unit
 ) {
     Surface(
@@ -113,7 +97,11 @@ private fun BlockOverlayScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Take a break. This app is currently restricted by your schedule.",
+                text = when (reason) {
+                    BlockReason.QUICK_BLOCK -> "Quick Block is active."
+                    BlockReason.SCHEDULE -> "Restricted by an active policy."
+                    BlockReason.DAILY_LIMIT -> "Today's app limit has been reached."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
